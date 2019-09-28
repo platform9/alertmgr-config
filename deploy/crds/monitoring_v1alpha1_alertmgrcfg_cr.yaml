@@ -1,0 +1,7 @@
+apiVersion: monitoring.pf9.io/v1alpha1
+kind: AlertMgrCfg
+metadata:
+  name: example-alertmgrcfg
+spec:
+  # Add fields here
+  size: 3
