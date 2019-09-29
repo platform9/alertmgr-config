@@ -4,7 +4,6 @@ import (
 	"context"
 	"io/ioutil"
 	"os"
-	"path"
 	"strings"
 
 	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
@@ -15,7 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -28,7 +27,7 @@ import (
 var log = logf.Log.WithName("controller_alertmgrcfg")
 
 const (
-	configDir = "/etc/promplus"
+	configDir = "/etc/alertmgrcfg"
 )
 
 /**
@@ -190,13 +189,7 @@ func (r *ReconcileAlertMgrCfg) Reconcile(request reconcile.Request) (reconcile.R
 
 func getAlertmanagerObjectMeta(c client.Client, name, ns string) (*metav1.ObjectMeta, error) {
 
-	defaultKubeCfg := path.Join(os.Getenv("HOME"), ".kube", "config")
-
-	if os.Getenv("KUBECONFIG") != "" {
-		defaultKubeCfg = os.Getenv("KUBECONFIG")
-	}
-
-	cfg, err := clientcmd.BuildConfigFromFlags("", defaultKubeCfg)
+	cfg, err := rest.InClusterConfig()
 	if err != nil {
 		return nil, os.ErrInvalid
 	}

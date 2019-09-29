@@ -15,11 +15,8 @@ spec:
       serviceAccountName: alertmgr-config
       containers:
         - name: alertmgr-config
-          # Replace this with the built image name
-          image: REPLACE_IMAGE
-          command:
-          - alertmgr-config
-          imagePullPolicy: Always
+          image: platform9/alertmgr-config
+          imagePullPolicy: IfNotPresent
           env:
             - name: WATCH_NAMESPACE
               valueFrom:

@@ -1,11 +1,12 @@
-kind: RoleBinding
+kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: alertmgr-config
 subjects:
 - kind: ServiceAccount
   name: alertmgr-config
+  namespace: pf9-monitoring
 roleRef:
-  kind: Role
+  kind: ClusterRole
   name: alertmgr-config
   apiGroup: rbac.authorization.k8s.io
