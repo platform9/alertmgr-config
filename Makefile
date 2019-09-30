@@ -5,7 +5,7 @@ BUILD_DIR ?= ./build
 ORG := github.com/platform9
 REPOPATH ?= $(ORG)/alertmgr-config
 
-DOCKER_IMAGE_NAME = platform9/alertmgr-config
+DOCKER_IMAGE_NAME = platform9/alertmgrcfg-operator
 DOCKER_IMAGE_TAG ?= latest
 
 LDFLAGS := -s -w -extldflags '-static'

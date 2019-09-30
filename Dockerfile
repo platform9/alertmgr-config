@@ -8,4 +8,3 @@ COPY alertmgrcfg /etc/alertmgrcfg/
 RUN chmod +x bin/alertmgr-config-operator
 
 ENTRYPOINT [ "/alertmgrcfg/bin/alertmgr-config-operator" ]
-#CMD sh -c "sleep 100000"
