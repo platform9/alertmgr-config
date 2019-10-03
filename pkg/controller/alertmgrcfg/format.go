@@ -1,9 +1,15 @@
 package alertmgrcfg
 
 import (
+	"fmt"
 	"os"
 
 	monitoringv1alpha1 "github.com/platform9/alertmgr-config/pkg/apis/monitoring/v1alpha1"
+	"github.com/platform9/alertmgr-config/pkg/util"
+)
+
+const (
+	suffixLen = 8
 )
 
 type format interface {
@@ -41,13 +47,15 @@ func formatReceiver(amc *monitoringv1alpha1.AlertMgrCfg, acfg *alertConfig) erro
 }
 
 func (f slackconfig) formatAlert(amc *monitoringv1alpha1.AlertMgrCfg, acfg *alertConfig) error {
-	var url, channel string
+	var url, channel, severity string
 	for _, param := range amc.Spec.Params {
 		switch param.Name {
 		case "url":
 			url = param.Value
 		case "channel":
 			channel = param.Value
+		case "severity":
+			severity = param.Value
 		}
 	}
 
@@ -59,17 +67,38 @@ func (f slackconfig) formatAlert(amc *monitoringv1alpha1.AlertMgrCfg, acfg *aler
 		return os.ErrInvalid
 	}
 
-	acfg.Receivers[0].SlackConfigs = append(acfg.Receivers[0].SlackConfigs,
-		slackconfig{
-			ApiURL:  url,
-			Channel: channel,
-		})
+	if severity == "" {
+		return os.ErrInvalid
+	}
+
+	if acfg.Route.Routes == nil {
+		acfg.Route.Routes = []routes{}
+	}
+	receiverName := fmt.Sprintf("%s-%s", "slack", util.RandString(suffixLen))
+
+	acfg.Route.Routes = append(acfg.Route.Routes, routes{
+		Receiver: receiverName,
+		MatchRe: map[string]string{
+			"severity": severity,
+		},
+	})
+
+	acfg.Receivers = append(acfg.Receivers, receiver{
+		Name: receiverName,
+		SlackConfigs: []slackconfig{
+			slackconfig{
+				ApiURL:  url,
+				Channel: channel,
+			},
+		},
+	})
 
 	return nil
 }
 
 func (f emailconfig) formatAlert(amc *monitoringv1alpha1.AlertMgrCfg, acfg *alertConfig) error {
-	var to, from, smarthost string
+	var to, from, smarthost, severity string
+	var auth_identity, auth_username, auth_password string
 	for _, param := range amc.Spec.Params {
 		switch param.Name {
 		case "to":
@@ -78,6 +107,14 @@ func (f emailconfig) formatAlert(amc *monitoringv1alpha1.AlertMgrCfg, acfg *aler
 			from = param.Value
 		case "smarthost":
 			smarthost = param.Value
+		case "severity":
+			severity = param.Value
+		case "auth_identity":
+			auth_identity = param.Value
+		case "auth_username":
+			auth_username = param.Value
+		case "auth_password":
+			auth_password = param.Value
 		}
 	}
 
@@ -93,12 +130,47 @@ func (f emailconfig) formatAlert(amc *monitoringv1alpha1.AlertMgrCfg, acfg *aler
 		return os.ErrInvalid
 	}
 
-	acfg.Receivers[0].EmailConfigs = append(acfg.Receivers[0].EmailConfigs,
-		emailconfig{
-			To:        to,
-			From:      from,
-			SmartHost: smarthost,
-		})
+	if severity == "" {
+		return os.ErrInvalid
+	}
+
+	if auth_identity == "" {
+		return os.ErrInvalid
+	}
+
+	if auth_username == "" {
+		return os.ErrInvalid
+	}
+
+	if auth_password == "" {
+		return os.ErrInvalid
+	}
+
+	if acfg.Route.Routes == nil {
+		acfg.Route.Routes = []routes{}
+	}
+
+	receiverName := fmt.Sprintf("%s-%s", "email", util.RandString(suffixLen))
+	acfg.Route.Routes = append(acfg.Route.Routes, routes{
+		Receiver: receiverName,
+		MatchRe: map[string]string{
+			"severity": severity,
+		},
+	})
+
+	acfg.Receivers = append(acfg.Receivers, receiver{
+		Name: receiverName,
+		EmailConfigs: []emailconfig{
+			emailconfig{
+				To:           to,
+				From:         from,
+				SmartHost:    smarthost,
+				AuthUsername: auth_username,
+				AuthIdentity: auth_identity,
+				AuthPassword: auth_password,
+			},
+		},
+	})
 
 	return nil
 }

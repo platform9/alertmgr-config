@@ -1,10 +1,12 @@
 module github.com/platform9/alertmgr-config
 
 require (
+	github.com/NYTimes/gziphandler v1.0.1 // indirect
+	github.com/coreos/prometheus-operator v0.29.0
 	github.com/go-openapi/spec v0.19.0
 	github.com/operator-framework/operator-sdk v0.10.1-0.20190927213437-ebac354b08ef
 	github.com/spf13/pflag v1.0.3
-	google.golang.org/appengine v1.5.0
+	github.com/stretchr/testify v1.3.0
 	gopkg.in/yaml.v2 v2.2.2
 	k8s.io/api v0.0.0-20190612125737-db0771252981
 	k8s.io/apimachinery v0.0.0-20190612125636-6a5db36e93ad

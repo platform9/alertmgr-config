@@ -1,33 +1,28 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: alertmgr-config
+  name: alertmgrcfg-operator
 spec:
   replicas: 1
   selector:
     matchLabels:
-      name: alertmgr-config
+      name: alertmgrcfg-operator
   template:
     metadata:
       labels:
-        name: alertmgr-config
+        name: alertmgrcfg-operator
     spec:
-      serviceAccountName: alertmgr-config
+      serviceAccountName: alertmgrcfg-operator
       containers:
         - name: alertmgr-config
-          # Replace this with the built image name
-          image: REPLACE_IMAGE
-          command:
-          - alertmgr-config
-          imagePullPolicy: Always
+          image: platform9/alertmgrcfg-operator
+          imagePullPolicy: IfNotPresent
           env:
             - name: WATCH_NAMESPACE
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.namespace
+              value: ""
             - name: POD_NAME
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
             - name: OPERATOR_NAME
-              value: "alertmgr-config"
+              value: "alertmgrcfg-operator"

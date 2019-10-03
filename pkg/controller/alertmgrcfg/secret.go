@@ -3,6 +3,7 @@ package alertmgrcfg
 import (
 	"context"
 
+	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -44,22 +45,13 @@ func checkSecretExists(c client.Client, ns string, secretName string) (bool, err
 	return true, nil
 }
 
-func createSecret(c client.Client, obj metav1.ObjectMeta, secretName string, kind string, data []byte) error {
+func createSecret(c client.Client, obj *metav1.ObjectMeta, ns string, secretName string, kind string, data []byte) error {
+
+	trueVar := true
 	cfg := &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      secretName,
-			Namespace: obj.Namespace,
-			// TODO: This seems wrong, we are setting owner to obj which is AlertMgrCfg. Shouldn't this be the actual
-			// alert manager?
-			// OwnerReferences: []metav1.OwnerReference{
-			// 	metav1.OwnerReference{
-			// 		APIVersion: monitoringv1.SchemeGroupVersion.String(),
-			// 		Name:       obj.GetName(),
-			// 		Kind:       kind,
-			// 		UID:        obj.GetUID(),
-			// 		Controller: &trueVar,
-			// 	},
-			// },
+			Namespace: ns,
 			Annotations: map[string]string{
 				"created_by": "alertmgr-controller",
 			},
@@ -67,6 +59,18 @@ func createSecret(c client.Client, obj metav1.ObjectMeta, secretName string, kin
 		Data: map[string][]byte{
 			"alertmanager.yaml": data,
 		},
+	}
+
+	if obj != nil {
+		cfg.ObjectMeta.OwnerReferences = []metav1.OwnerReference{
+			metav1.OwnerReference{
+				APIVersion: monitoringv1.SchemeGroupVersion.String(),
+				Name:       obj.GetName(),
+				Kind:       kind,
+				UID:        obj.GetUID(),
+				Controller: &trueVar,
+			},
+		}
 	}
 
 	if err := c.Create(context.TODO(), cfg); err != nil {

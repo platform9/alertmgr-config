@@ -4,12 +4,17 @@ import (
 	"context"
 	"io/ioutil"
 	"os"
+	"strings"
 
+	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
+	monitoringclient "github.com/coreos/prometheus-operator/pkg/client/versioned"
 	monitoringv1alpha1 "github.com/platform9/alertmgr-config/pkg/apis/monitoring/v1alpha1"
 	"gopkg.in/yaml.v2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -22,7 +27,7 @@ import (
 var log = logf.Log.WithName("controller_alertmgrcfg")
 
 const (
-	configDir = "/etc/promplus"
+	configDir = "/etc/alertmgrcfg"
 )
 
 /**
@@ -98,98 +103,108 @@ func (r *ReconcileAlertMgrCfg) Reconcile(request reconcile.Request) (reconcile.R
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
-			return reconcile.Result{}, nil
-		}
-		// Error reading the object - requeue the request.
-		return reconcile.Result{}, err
-	}
-
-	log.V(2).Info("syncing alert manager config: %s, type: %s", amc.Name, amc.Spec.Type)
-	var alertManagerName string
-	for key, val := range amc.Labels {
-		log.V(2).Info("Labels: %s %s", key, val)
-		if key == "alertmanager" {
-			alertManagerName = val
-			break
+			//return reconcile.Result{}, nil
+			reqLogger.Info("Alert manager cfg object deleted")
+		} else {
+			// Error reading the object - requeue the request.
+			return reconcile.Result{}, err
 		}
 	}
-	log.V(2).Info("Alert manager label: %s", alertManagerName)
 
+	nameArray := strings.Split(request.Name, "-")
+	alertManagerName := nameArray[0]
 	if alertManagerName == "" {
-		log.Info("Alert manager label missing in alertmanager config: %s", amc.Name)
+		reqLogger.Info("Alert manager name missing in alertmgrcfg name")
 		return reconcile.Result{}, nil
 	}
 
+	reqLogger.Info("syncing alert manager config: ", "Spec.type", amc.Spec.Type)
+
 	file, err := os.Open(configDir + "/alertmanager.yaml")
 	if err != nil {
-		log.Error(err, "Failed to open alert manager config file")
+		reqLogger.Error(err, "Failed to open alert manager config file")
 		return reconcile.Result{}, os.ErrInvalid
 	}
 	defer file.Close()
 	data, err := ioutil.ReadAll(file)
 	if err != nil {
-		log.Error(err, "Failed to read alert manager config file")
+		reqLogger.Error(err, "Failed to read alert manager config file")
 		return reconcile.Result{}, os.ErrInvalid
 	}
 
 	var acfg alertConfig
 	yaml.Unmarshal(data, &acfg)
 
-	err = formatReceiver(amc, &acfg)
+	var amcList monitoringv1alpha1.AlertMgrCfgList
+	err = r.client.List(context.TODO(), &client.ListOptions{}, &amcList)
 	if err != nil {
-		log.Error(err, "Failed to format receiver for: %s", amc.Spec.Type)
-		return reconcile.Result{}, err
-	}
-
-	var amcList *monitoringv1alpha1.AlertMgrCfgList
-	err = r.client.List(context.TODO(), &client.ListOptions{}, amcList)
-
-	if err != nil {
-		log.Error(err, "Failed to get list of alert manager config objects ")
+		reqLogger.Error(err, "Failed to get list of alert manager config objects ")
 		return reconcile.Result{}, err
 	}
 	for _, amcItr := range amcList.Items {
-		log.V(2).Info("Name: %s, ns: %s", amcItr.Name, amcItr.Namespace)
+		log.Info("Listing Alertmgrcfg: ", "Name", amcItr.Name, "ns", amcItr.Namespace)
 
-		for key, val := range amcItr.Labels {
-			log.Info("Labels: %s %s", key, val)
-			if key == "alertmanager" && val == alertManagerName {
-				if amc.Name == amcItr.Name {
-					log.V(2).Info("Ignoring current amc object: %s", amcItr.Name)
-					continue
-				}
-				log.V(2).Info("Formatting receiver for: %s", amcItr.Name)
-				err = formatReceiver(&amcItr, &acfg)
-				if err != nil {
-					log.Error(err, "Failed to format receiver for: %s", amc.Spec.Type)
-					return reconcile.Result{}, err
-				}
+		nameArray = strings.Split(amcItr.Name, "-")
+		if alertManagerName == nameArray[0] && request.Namespace == amcItr.Namespace {
+			log.Info("Formatting receiver for", "alertmgrcfg", amcItr.Name)
+			err = formatReceiver(&amcItr, &acfg)
+			if err != nil {
+				reqLogger.Error(err, "Failed to format receiver for ", "Type", amcItr.Spec.Type)
+				return reconcile.Result{}, err
 			}
 		}
 	}
 
 	secretName := "alertmanager-" + alertManagerName
 
-	exists, _ := checkSecretExists(r.client, amc.Namespace, secretName)
+	exists, _ := checkSecretExists(r.client, request.Namespace, secretName)
 	if exists {
-		log.Info("Secret for alertmanager: %s exists deleting it", amc.Name)
-		_, err = deleteSecret(r.client, amc.Namespace, secretName)
+		reqLogger.Info("Secret exists deleting it", "secretname", secretName)
+		_, err = deleteSecret(r.client, request.Namespace, secretName)
 		if err != nil {
-			log.Error(err, "Failed to delete secret: %s", secretName)
+			reqLogger.Error(err, "Failed to delete secret", "secretname", secretName)
 			return reconcile.Result{}, err
 		}
 	}
 
 	data, err = yaml.Marshal(&acfg)
 	if err != nil {
-		log.Error(err, "Failed to marshal alert mgr secret ")
+		reqLogger.Error(err, "Failed to marshal alert mgr secret ")
 		return reconcile.Result{}, err
 	}
 
-	err = createSecret(r.client, amc.ObjectMeta, secretName, "", data)
+	obj, err := getAlertmanagerObjectMeta(r.client, alertManagerName, request.Namespace)
 	if err != nil {
+		log.Error(err, "Failed to get alert manager object meta")
+	}
+
+	err = createSecret(r.client, obj, request.Namespace, secretName, monitoringv1.AlertmanagersKind, data)
+	if err != nil {
+		reqLogger.Error(err, "Failed to create secret", "secretname", secretName)
 		return reconcile.Result{}, err
 	}
-	log.Info("Created secret: %s for %s", secretName, amc.Name)
+	reqLogger.Info("Created secret: ", "secretname", secretName)
 	return reconcile.Result{}, nil
+}
+
+func getAlertmanagerObjectMeta(c client.Client, name, ns string) (*metav1.ObjectMeta, error) {
+
+	cfg, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, os.ErrInvalid
+	}
+
+	mclient, err := monitoringclient.NewForConfig(cfg)
+	if err != nil {
+		return nil, os.ErrInvalid
+	}
+
+	var options metav1.GetOptions
+	var am *monitoringv1.Alertmanager
+	am, err = mclient.MonitoringV1().Alertmanagers(ns).Get(name, options)
+	if err != nil {
+		log.Error(err, "Failed to get list of alert manager config objects")
+		return nil, err
+	}
+	return &am.ObjectMeta, nil
 }
